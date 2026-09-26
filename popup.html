@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+<header>
+  <div class="logo">&#9670;</div>
+  <div>
+    <h1>Aegis Lens</h1>
+    <p id="tab-url" class="url">loading&hellip;</p>
+  </div>
+</header>
+
+<section id="page-info" class="card hidden">
+  <div class="stat"><b id="stat-forms">&ndash;</b><span>forms</span></div>
+  <div class="stat"><b id="stat-params">&ndash;</b><span>url params</span></div>
+  <div class="stat"><b id="stat-points">&ndash;</b><span>test points</span></div>
+</section>
+
+<section class="card" id="controls">
+  <div class="opts">
+    <label><input type="checkbox" id="opt-sqli" checked /> SQLi</label>
+    <label><input type="checkbox" id="opt-xss" checked /> XSS</label>
+    <label><input type="checkbox" id="opt-headers" checked /> Headers</label>
+  </div>
+  <label class="consent"><input type="checkbox" id="consent" /> I own this target or have permission to test it</label>
+  <div class="row">
+    <button id="scan-btn" class="primary" disabled>Scan this page</button>
+    <button id="stop-btn" class="ghost hidden">Stop</button>
+  </div>
+  <div id="progress" class="hidden">
+    <div class="bar"><i id="bar-fill"></i></div>
+    <p id="progress-text">&nbsp;</p>
+  </div>
+  <p id="notice" class="notice hidden"></p>
+</section>
+
+<section class="card hidden" id="results-card">
+  <div class="results-head">
+    <h2>Findings <span id="find-count" class="count">0</span></h2>
+    <button id="export-btn" class="ghost small">Export JSON</button>
+  </div>
+  <div id="findings"><p class="empty">No findings yet.</p></div>
+</section>
+
+<footer>Probes are non-destructive detection only. Test responsibly.</footer>
+<script src="popup.js"></script>
+</body>
+</html>
