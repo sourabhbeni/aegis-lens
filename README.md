@@ -47,7 +47,7 @@ icons/             extension icons
 
 - **1 — Standard**: base payloads only, fastest
 - **2 — Filter bypass**: + case/encoding/comment transforms and the first evasion XSS wave
-- **3 — Full WAF-evasion**: all 9 transforms and the complete 22-vector XSS catalogue
+- **3 — Full WAF-evasion**: all 11 transforms and the complete 27-vector XSS catalogue
 
 Transforms run as a second pass only when standard probes are blocked — no wasted requests.
 
@@ -59,3 +59,12 @@ Transforms run as a second pass only when standard probes are blocked — no was
 - The CVE DB is a curated starter set of famous fingerprintable issues, not a full scanner feed
 
 MIT — built for learning and authorized testing.
+
+## Changelog
+
+- **1.2.0** — Community feed update (2026-09-26): 5 new XSS vectors (marquee, video/audio
+  onerror, input autofocus, nested math-namespace breakout), 4 new SSTI engine fingerprints
+  (ERB/EJS, Mako/Pebble, Thymeleaf, Jinja2-vs-Twig distinguisher), 2 new level-3 WAF transforms
+  (JSON-wrap blind from Claroty research, XML hex-entity keyword encoding), auth-bypass
+  tautology probe. Request cap math updated automatically via `planCounts`.
+- **1.1.0** — Full payload arsenal: 9 evasion transforms, UNION/SSTI probes, curated CVE DB.
