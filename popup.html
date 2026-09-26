@@ -23,7 +23,17 @@
   <div class="opts">
     <label><input type="checkbox" id="opt-sqli" checked /> SQLi</label>
     <label><input type="checkbox" id="opt-xss" checked /> XSS</label>
+    <label><input type="checkbox" id="opt-ssti" checked /> SSTI</label>
     <label><input type="checkbox" id="opt-headers" checked /> Headers</label>
+    <label><input type="checkbox" id="opt-cve" checked /> CVE</label>
+  </div>
+  <div class="level-row">
+    <label for="level">Evasion level</label>
+    <select id="level">
+      <option value="1">1 — Standard</option>
+      <option value="2">2 — Filter bypass</option>
+      <option value="3">3 — Full WAF-evasion</option>
+    </select>
   </div>
   <label class="consent"><input type="checkbox" id="consent" /> I own this target or have permission to test it</label>
   <div class="row">
