@@ -1,0 +1,17 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate manifest
+        run: node -e "const m=require('./manifest.json'); if(m.manifest_version!==3) throw new Error('not mv3'); console.log('manifest ok:', m.name, m.version)"
+      - name: Syntax-check scripts
+        run: for f in background.js popup.js; do node --check "$f" && echo "$f ok"; done
