@@ -112,7 +112,8 @@ $("scan-btn").addEventListener("click", () => {
   $("scan-btn").classList.add("hidden");
   $("stop-btn").classList.remove("hidden");
   setNotice("");
-  const opts = { sqli: $("opt-sqli").checked, xss: $("opt-xss").checked, headers: $("opt-headers").checked };
+  const opts = { sqli: $("opt-sqli").checked, xss: $("opt-xss").checked, ssti: $("opt-ssti").checked, headers: $("opt-headers").checked, cve: $("opt-cve").checked };
+  const level = parseInt($("level").value, 10) || 1;
   port = chrome.runtime.connect({ name: "aegis-scan" });
   port.onMessage.addListener((m) => {
     if (m.type === "progress") {
@@ -126,7 +127,7 @@ $("scan-btn").addEventListener("click", () => {
       endScan(m);
     }
   });
-  port.postMessage({ type: "start", page: scanMeta.page, opts });
+  port.postMessage({ type: "start", page: scanMeta.page, opts, level });
 });
 
 function endScan(m) {
@@ -149,7 +150,7 @@ $("stop-btn").addEventListener("click", () => {
 
 $("export-btn").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify({
-    tool: "aegis-lens", version: "1.0.0",
+    tool: "aegis-lens", version: "1.1.0",
     target: scanMeta.page?.url, exported: new Date().toISOString(),
     findings: allFindings,
   }, null, 2)], { type: "application/json" });
