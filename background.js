@@ -197,17 +197,19 @@ async function scanXss(point, name, level, emit, label) {
 /* ---------------- SSTI ---------------------------------------------- */
 
 async function scanSsti(point, name, base, emit, label) {
-  if (base.text.includes(SSTI_EXPECTED)) return;
+  if (base.text.includes(SSTI_EXPECTED) || base.text.includes(SSTI_EXPECTED_ALT)) return;
   for (const probe of SSTI_PROBES) {
     if (stopFlag) return;
     try {
       const r = await sendProbe(point, name, probe); emit({ progress: true });
-      if (r.text.includes(SSTI_EXPECTED)) {
+      const hit = r.text.includes(SSTI_EXPECTED) ? SSTI_EXPECTED
+                : r.text.includes(SSTI_EXPECTED_ALT) ? SSTI_EXPECTED_ALT : null;
+      if (hit) {
         emit({
           finding: {
             severity: "MEDIUM", type: "Server-side template injection (possible)",
             point: label, param: name, payload: probe,
-            evidence: `template math evaluated → ${SSTI_EXPECTED} in response`,
+            evidence: `template math evaluated → ${hit} in response`,
             detail: "The template engine evaluated injected math. Verify manually before escalating.",
           },
         });
