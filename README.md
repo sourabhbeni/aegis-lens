@@ -62,6 +62,11 @@ MIT — built for learning and authorized testing.
 
 ## Changelog
 
+- **1.2.1** — Community feed update (2026-09-28): 2 new XSS vectors (SVG `<animate>`
+  href hijack bypassing event-handler + href filters, `<noscript>` mutation-XSS breakout),
+  1 new SSTI `{% if %}` tag probe (Django-family incl. Pongo2/Go templates, Nullcon 2026
+  research), 1 new level-3 WAF transform (XML decimal-entity keyword encoding, PortSwigger
+  XML-encoding lab), 1 new SQLi boolean-blind pair (strcmp synonym-function oracle).
 - **1.2.0** — Community feed update (2026-09-26): 5 new XSS vectors (marquee, video/audio
   onerror, input autofocus, nested math-namespace breakout), 4 new SSTI engine fingerprints
   (ERB/EJS, Mako/Pebble, Thymeleaf, Jinja2-vs-Twig distinguisher), 2 new level-3 WAF transforms
