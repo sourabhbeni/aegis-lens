@@ -62,6 +62,13 @@ MIT — built for learning and authorized testing.
 
 ## Changelog
 
+- **1.2.2** — Community feed update (2026-10-05): 3 new XSS vectors (SVG
+  `<animatetransform onbegin>` animation-event vector, HTML-entity `&apos;`
+  quote breakout for backslash-escaped JS strings, namespaced `<a:b>`
+  sanitizer-bypass tag from the SunEditor CVE-2026-59167 writeup), 2 new SSTI
+  engine fingerprints (Apache Velocity `#set`, Smarty3 `{if}`), 1 new level-3
+  WAF transform (form-feed whitespace), 1 new SQLi error probe (lone
+  backslash escape, Roundcube CVE-2026-48842 pattern).
 - **1.2.1** — Community feed update (2026-09-28): 2 new XSS vectors (SVG `<animate>`
   href hijack bypassing event-handler + href filters, `<noscript>` mutation-XSS breakout),
   1 new SSTI `{% if %}` tag probe (Django-family incl. Pongo2/Go templates, Nullcon 2026
