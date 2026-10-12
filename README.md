@@ -62,6 +62,17 @@ MIT — built for learning and authorized testing.
 
 ## Changelog
 
+- **1.2.3** — Community feed update (2026-10-12): 3 new XSS vectors (missing
+  `javascript:` URI classics: anchor `href`, iframe `src`, form `action`),
+  3 new SSTI engine fingerprints (FreeMarker `[=]` alt delimiter, Razor
+  `@(...)` expression, Thymeleaf `[[...]]` inline — all yield SSTI_EXPECTED),
+  1 new SQLi error probe (double-URL-encoded quote `%2527` for double-decode
+  paths), 1 new SQLi boolean-blind pair (scientific-notation `1e0`/`1e1`
+  oracle, @ptswarm/GoSecure 2026). No new level-3 WAF transforms this week:
+  candidate whitespace/keyword transforms are no-ops against EVADE_BASE, and
+  no new CVE met the version-range + reliable-fingerprint bar (skipped
+  Guardium CVE-2026-80381, PHPNuxBill CVE-2026-108107, WP Data Access
+  CVE-2026-95605).
 - **1.2.2** — Community feed update (2026-10-05): 3 new XSS vectors (SVG
   `<animatetransform onbegin>` animation-event vector, HTML-entity `&apos;`
   quote breakout for backslash-escaped JS strings, namespaced `<a:b>`
